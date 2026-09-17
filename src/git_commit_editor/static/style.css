@@ -1,0 +1,1049 @@
+/* Git Commit Message Editor
+ *
+ * Hand-written CSS, no build step and no remote assets — the app serves a
+ * `default-src 'self'` CSP, so a CDN font or framework would simply be blocked.
+ *
+ * Colour is carried entirely by custom properties, which is what makes the
+ * light theme a token swap rather than a second stylesheet. Semantics:
+ *   accent  — the one thing you can do next (spent on a single filled
+ *             control at a time, plus focus rings and a few links)
+ *   edited  — work in progress (deliberately NOT the warning colour: an edit
+ *             is not a problem, and amber made every change look like one)
+ *   warning — something to read before saving
+ *   danger  — destructive, or invalid
+ * Surfaces run darkest → lightest: --field (recessed wells) < --bg (page) <
+ * --surface (the sheet) < --surface-2 (nested neutral) < --raised (floating).
+ * --line is a hairline for containers; --ctrl is the 3:1 ring for anything
+ * you can operate. Nothing else gets a border.
+ */
+
+:root {
+    color-scheme: dark;
+
+    /* Surfaces: darkest → lightest. */
+    --field:      #0b0e12;  /* recessed wells: inputs, textarea, diff pre, orphan pre        */
+    --bg:         #0f1216;  /* page                                                          */
+    --surface:    #171b21;  /* the sheet: header band, ledger, panels, save bar               */
+    --surface-2:  #1e242c;  /* nested neutral: sha chip, tags, kbd, hunk header, expanded btn */
+    --raised:     #222931;  /* floating: modal, toast                                        */
+
+    /* Edges. */
+    --line:       #262c34;  /* hairline for containers/dividers. Decorative: 1.23:1 on surface */
+    --ctrl:       #5f6b79;  /* control boundary. 3.18:1 on surface, 3.56:1 on field, 3.46:1 on bg */
+    --ctrl-hover: #9aa5b3;  /* = --muted; ring brightens on hover                            */
+
+    /* Text. */
+    --text:       #e9edf2;  /* 14.70:1 surface · 16.45 field · 12.49 raised · 13.29 surface-2 */
+    --muted:      #9aa5b3;  /* 6.92:1 surface · 7.74 field · 5.88 raised · 6.26 surface-2 · 7.52 bg */
+    --faint:      #6f7b89;  /* NON-TEXT ONLY (icons at rest, hollow rail nodes): 4.01:1 surface, 4.35 bg, 4.49 field */
+
+    /* Meaning. */
+    --accent:     #6fdcc4;  /* 10.46:1 surface · 11.71 field · 11.36 bg                      */
+    --on-accent:  #0f1216;  /* 11.36:1 on --accent; 12.82 on --accent-hover                  */
+    --accent-hover: #76e9d0;
+    --edited:     #c4adff;  /* 8.86:1 surface · 9.63 bg                                      */
+    --warning:    #f3c56b;  /* 10.71:1 surface · 11.98 field · 11.63 bg                      */
+    --danger:     #ff9d98;  /* 8.66:1 surface · 9.70 field · 9.41 bg                         */
+    --on-danger:  #0f1216;  /* 9.41:1 on --danger; 10.03 on --danger-hover                   */
+    --danger-hover: #ffa6a1;
+    --success:    #93d99b;  /* 10.40:1 surface · 11.64 field                                 */
+
+    /* Tints — solid, pre-composited over --surface unless stated. */
+    --edited-tint:  #282a37; /* edited @10% on surface. --edited on it: 7.29:1               */
+    --edited-row:   #20222c; /* edited @5%  on surface. --text 13.46:1 · --muted 6.34:1      */
+    --warning-tint: #312f2a; /* warning @12%. --warning on it: 8.28:1                        */
+    --danger-tint:  #332b2f; /* danger @12%.  --danger on it: 6.89:1                         */
+    --success-tint: #263230; /* success @12%. --success on it: 7.99:1                        */
+    --add-tint:     #192220; /* success @10% over --field. --success on it: 9.79:1 (diff +)  */
+    --del-tint:     #231c1f; /* danger @10% over --field.  --danger on it: 8.37:1 (diff −)   */
+    --hover:        #25292e; /* white @6% on surface. --text 12.44 · --muted 5.86            */
+    --btn2:         #2a2d33; /* white @8% on surface: secondary button fill. --text 11.74 · --muted 5.53 */
+    --selection:    rgba(111, 220, 196, .28); /* composite #274844 over field; --text 8.52:1 */
+
+    /* Elevation. */
+    --well-inset:    inset 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-raised: inset 0 1px 0 rgba(255, 255, 255, .04),
+                     0 2px 6px rgba(0, 0, 0, .35), 0 12px 32px rgba(0, 0, 0, .45);
+    --shadow-bar:    0 -8px 24px rgba(0, 0, 0, .35);
+    --scrim:         rgba(8, 10, 12, .64);
+    --shadow-primary: inset 0 1px 0 rgba(255, 255, 255, .18); /* a hint of material on the one filled button */
+    --focus:         var(--accent);
+
+    /* Light text on dark reads heavy without grayscale AA on macOS; the light
+       theme sets both back to auto. */
+    --aa-webkit: antialiased;
+    --aa-moz:    grayscale;
+
+    /* Type families. Sans for chrome, mono for anything git stores or emits. */
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    /* Spacing scale. A 4px base with a deliberate jump in the middle: 12-24
+       are close together (internal padding), 32/48 are far apart (they
+       separate sections). Two adjacent intervals differ by >=1.5x or match. */
+    --s1: 4px;  --s2: 6px;  --s3: 8px;  --s4: 12px;  --s5: 16px;
+    --s6: 20px; --s7: 24px; --s8: 32px; --s9: 48px;
+
+    --shell: 1080px;    /* see .shell for why */
+
+    /* Motion. Four motions total: hover fills, chevrons, panels/modal/toast
+       entering, and the loading hairline. Nothing moves on exit — closing
+       should feel instant. The prefers-reduced-motion block at the end of
+       this file zeroes all of it. */
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --d-fast: 120ms;
+    --d-base: 160ms;
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    --field:      #f6f8fa;  /* a whisper of recess; the ring does the work in light          */
+    --bg:         #f3f5f7;
+    --surface:    #ffffff;
+    --surface-2:  #eef1f5;
+    --raised:     #ffffff;  /* same as surface; the shadow is the difference                 */
+
+    --line:       #e2e6eb;  /* 1.25:1 on surface — decorative                                */
+    --ctrl:       #7b8694;  /* 3.70:1 surface · 3.47 field · 3.38 bg                         */
+    --ctrl-hover: #566372;
+
+    --text:       #151b23;  /* 17.31:1 surface · 16.26 field · 15.84 bg · 15.28 surface-2    */
+    --muted:      #566372;  /* 6.13:1 surface · 5.76 field · 5.61 bg · 5.41 surface-2 · 5.48 btn2 */
+    --faint:      #7b8694;  /* NON-TEXT ONLY: 3.70:1 surface, 3.38 bg                        */
+
+    --accent:     #0a7059;  /* 6.04:1 surface · 5.68 field · 5.53 bg · 5.33 surface-2        */
+    --on-accent:  #ffffff;  /* 6.04:1 on --accent; 7.64 on --accent-hover                    */
+    --accent-hover: #085f4b;
+    --edited:     #6843a6;  /* 7.14:1 surface · 6.53 bg                                      */
+    --warning:    #805500;  /* 6.53:1 surface · 6.13 field · 5.97 bg                         */
+    --danger:     #b42318;  /* 6.57:1 surface · 6.18 field · 6.02 bg                         */
+    --on-danger:  #ffffff;  /* 6.57:1 on --danger; 8.08 on --danger-hover                    */
+    --danger-hover: #9b1f15;
+    --success:    #1f6b2c;  /* 6.57:1 surface · 6.17 field                                   */
+
+    --edited-tint:  #f0ecf6; /* --edited on it 6.13:1                                        */
+    --edited-row:   #f7f6fb; /* --text 16.10 · --muted 5.70                                  */
+    --warning-tint: #f0ebe0; /* --warning 5.49:1                                             */
+    --danger-tint:  #f6e5e3; /* --danger 5.40:1                                              */
+    --success-tint: #e4ede6; /* --success 5.49:1                                             */
+    --add-tint:     #e0eae5; /* --success 5.34:1                                             */
+    --del-tint:     #efe3e3; /* --danger 5.25:1                                              */
+    --hover:        #f5f5f5; /* black @4%. --text 15.88 · --muted 5.63                       */
+    --btn2:         #f2f2f2; /* black @5%. --text 15.47 · --muted 5.48                       */
+    --selection:    rgba(10, 112, 89, .18); /* composite #cce0dd; --text 12.59:1             */
+
+    --well-inset:    inset 0 1px 2px rgba(16, 24, 40, .06);
+    --shadow-raised: 0 1px 2px rgba(16, 24, 40, .06), 0 12px 32px rgba(16, 24, 40, .12);
+    --shadow-bar:    0 -8px 24px rgba(16, 24, 40, .06);
+    --scrim:         rgba(23, 27, 33, .48);
+    --shadow-primary: 0 1px 2px rgba(16, 24, 40, .12);
+
+    --aa-webkit: auto;
+    --aa-moz:    auto;
+}
+
+/* System theme: with no explicit choice, a light OS gets the light tokens.
+   A media query cannot share a selector list with the attribute rule above,
+   so the declarations are repeated — the two blocks MUST stay identical
+   (test_ui.py compares the computed tokens of both). */
+@media (prefers-color-scheme: light) {
+:root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --field:      #f6f8fa;  /* a whisper of recess; the ring does the work in light          */
+    --bg:         #f3f5f7;
+    --surface:    #ffffff;
+    --surface-2:  #eef1f5;
+    --raised:     #ffffff;  /* same as surface; the shadow is the difference                 */
+
+    --line:       #e2e6eb;  /* 1.25:1 on surface — decorative                                */
+    --ctrl:       #7b8694;  /* 3.70:1 surface · 3.47 field · 3.38 bg                         */
+    --ctrl-hover: #566372;
+
+    --text:       #151b23;  /* 17.31:1 surface · 16.26 field · 15.84 bg · 15.28 surface-2    */
+    --muted:      #566372;  /* 6.13:1 surface · 5.76 field · 5.61 bg · 5.41 surface-2 · 5.48 btn2 */
+    --faint:      #7b8694;  /* NON-TEXT ONLY: 3.70:1 surface, 3.38 bg                        */
+
+    --accent:     #0a7059;  /* 6.04:1 surface · 5.68 field · 5.53 bg · 5.33 surface-2        */
+    --on-accent:  #ffffff;  /* 6.04:1 on --accent; 7.64 on --accent-hover                    */
+    --accent-hover: #085f4b;
+    --edited:     #6843a6;  /* 7.14:1 surface · 6.53 bg                                      */
+    --warning:    #805500;  /* 6.53:1 surface · 6.13 field · 5.97 bg                         */
+    --danger:     #b42318;  /* 6.57:1 surface · 6.18 field · 6.02 bg                         */
+    --on-danger:  #ffffff;  /* 6.57:1 on --danger; 8.08 on --danger-hover                    */
+    --danger-hover: #9b1f15;
+    --success:    #1f6b2c;  /* 6.57:1 surface · 6.17 field                                   */
+
+    --edited-tint:  #f0ecf6; /* --edited on it 6.13:1                                        */
+    --edited-row:   #f7f6fb; /* --text 16.10 · --muted 5.70                                  */
+    --warning-tint: #f0ebe0; /* --warning 5.49:1                                             */
+    --danger-tint:  #f6e5e3; /* --danger 5.40:1                                              */
+    --success-tint: #e4ede6; /* --success 5.49:1                                             */
+    --add-tint:     #e0eae5; /* --success 5.34:1                                             */
+    --del-tint:     #efe3e3; /* --danger 5.25:1                                              */
+    --hover:        #f5f5f5; /* black @4%. --text 15.88 · --muted 5.63                       */
+    --btn2:         #f2f2f2; /* black @5%. --text 15.47 · --muted 5.48                       */
+    --selection:    rgba(10, 112, 89, .18); /* composite #cce0dd; --text 12.59:1             */
+
+    --well-inset:    inset 0 1px 2px rgba(16, 24, 40, .06);
+    --shadow-raised: 0 1px 2px rgba(16, 24, 40, .06), 0 12px 32px rgba(16, 24, 40, .12);
+    --shadow-bar:    0 -8px 24px rgba(16, 24, 40, .06);
+    --scrim:         rgba(23, 27, 33, .48);
+    --shadow-primary: 0 1px 2px rgba(16, 24, 40, .12);
+
+    --aa-webkit: auto;
+    --aa-moz:    auto;
+}
+}
+
+@media (prefers-contrast: more) {
+    :root { --line: var(--ctrl); --faint: var(--muted); }
+}
+
+/* ---- Type scale ----------------------------------------------------------
+   Seven sizes, four weights, one rule: line heights are multiples of 2 so
+   the sans (14/20) and the mono editor (14/22) share a baseline grid, and
+   label -> field -> hint stacks land on whole pixels. */
+
+body            { font: 400 14px/20px var(--sans); }
+.brand h1       { font: 600 17px/24px var(--sans); letter-spacing: -.01em; }
+.modal h2       { font: 600 18px/26px var(--sans); letter-spacing: -.01em; text-wrap: balance; }
+.panel h2       { font: 600 14px/20px var(--sans); }
+.commit-subject { font: 600 15px/22px var(--sans); letter-spacing: -.006em; text-wrap: pretty; }
+.commit-sha, .backup-name, .modal-summary code { font: 400 12px/16px var(--mono); }
+.commit-author, .commit-date, .commit-tag, .pill, .commit-hint, .editor-label, .list-info,
+.filter-count, .draft-status, .tl-cap, .save-log-meta, .stat-head, .stat-scope { font-size: 12px; line-height: 16px; }
+.commit-author  { color: var(--text); font-weight: 500; }   /* the one meta item allowed to be text-coloured */
+.control label, .disclosure, .link, .panel p, .modal-list, .toast-body { font-size: 13px; line-height: 18px; }
+.control label  { font-weight: 500; }
+button          { font-weight: 500; }
+button.primary  { font-weight: 600; }
+.commit-diff pre.diff, .stat-path, .stat-nums, #repo-path, #base-ref, .orphan pre, .copy-row code
+                { font: 400 13px/20px var(--mono); }
+.commit textarea{ font: 400 14px/22px var(--mono); tab-size: 4; }
+
+/* Numbers that change should not jitter. */
+.commit-sha, .commit-date, .filter-count, .subject-count, .stat-nums, .stat-head, .edit-count,
+.draft-status, .save-log-meta, .modal-impact { font-variant-numeric: tabular-nums; }
+
+/* Font smoothing is a theme token: see --aa-webkit / --aa-moz. */
+body { -webkit-font-smoothing: var(--aa-webkit); -moz-osx-font-smoothing: var(--aa-moz); }
+
+* { box-sizing: border-box; }
+
+/* The `hidden` attribute must win over the `display` rules below
+   (`.modal-overlay`, `.save-bar`, `#branch-controls`); an author `display`
+   rule otherwise overrides the user-agent `[hidden] { display: none }`. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 84px; /* 60px save-bar height + one 24px container gap; clears the fixed save bar */
+}
+
+/* Why 1080: the content is 72-column text. A ledger row at 1080 - 48 gutters
+   - 44 rail - 20 right padding is 968px wide; the editor fills it, which is
+   1.55x the wrap width, without the dead strip a wider shell used to leave
+   down its right edge. At 1440 the page sits with margin each side and
+   looks placed rather than stretched. */
+.shell {
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding-inline: 24px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.skip-link {
+    position: absolute;
+    left: var(--s4);
+    top: -60px;
+    z-index: 40;
+    background: var(--accent);
+    color: var(--on-accent);
+    padding: var(--s3) var(--s4);
+    border-radius: 6px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top .12s;
+}
+.skip-link:focus { top: var(--s4); }
+
+/* One focus treatment everywhere, and it must stay visible on top of the
+   edited/error borders — hence an offset outline rather than a border swap. */
+:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 3px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* ---- Surfaces by layer ----------------------------------------------------
+   The test: with all text removed, can you still tell a card from a panel
+   from an input from a button from the save bar? Each layer below has a
+   fill, an edge rule and (only where it floats) a shadow; no two share the
+   same combination. */
+
+/* Sheet. */
+.timeline, .stack-list li, .banner, .state-warn, .orphan-drafts {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+.header { background: var(--surface); border-bottom: 1px solid var(--line); }
+
+/* Well: recessed, like a terminal pane. A field says "type here" the way a
+   raised control says "press here" — so inputs are darker than the sheet. */
+input, select, textarea, .commit-diff pre.diff, .orphan pre, .copy-row code {
+    background: var(--field);
+    border: 1px solid var(--ctrl);
+    border-radius: 6px;
+    box-shadow: var(--well-inset);
+    color: var(--text);
+}
+.commit-diff pre.diff, .orphan pre { border-color: var(--line); border-radius: 8px; } /* not controls: hairline */
+input:hover, select:hover, textarea:hover { border-color: var(--ctrl-hover); }
+
+input, select, textarea {
+    padding: var(--s3) var(--s4); /* 8 12: 20px line + 16 = the 36px control height */
+    font-size: 14px;
+    line-height: 20px;
+    font-family: inherit;
+    min-height: 36px;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+/* Nested neutral. */
+.commit-sha, .commit-tag, .pill, kbd, .disclosure[aria-expanded="true"] {
+    background: var(--surface-2);
+    border-radius: 4px;
+}
+
+/* Controls: raised neutral by default; button.primary is the one filled
+   control on the page (the save button, once there is something to save). */
+button {
+    background: var(--btn2);
+    border: 1px solid var(--ctrl);
+    border-radius: 6px;
+    color: var(--text);
+    padding: var(--s3) var(--s4);
+    font-size: 14px;
+    line-height: 20px;
+    font-family: inherit;
+    min-height: 36px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+button:hover:not(:disabled) { background: var(--hover); border-color: var(--ctrl-hover); }
+button:active:not(:disabled) { transform: translateY(0.5px); }
+button.ghost { background: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--hover); }
+
+button.primary {
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--on-accent);
+    box-shadow: var(--shadow-primary);
+}
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button.primary.danger { background: var(--danger); color: var(--on-danger); }
+button.primary.danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+/* The disabled primary is a plain neutral control, not a half-transparent
+   green — it *becomes* mint the moment there is something to save. */
+button:disabled, button.primary:disabled, button.primary.danger:disabled {
+    background: var(--surface-2); color: var(--muted); border-color: var(--line);
+    box-shadow: none; opacity: 1; cursor: not-allowed;
+}
+
+button.link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    padding: var(--s1) var(--s2);
+    min-height: 0;
+    font-size: 13px;
+}
+button.link:hover { text-decoration: underline; }
+
+.icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--faint);
+}
+.icon-btn:hover:not(:disabled) { color: var(--text); }
+/* The icon sits in a <span> wrapper, and an inline span is baseline-aligned and
+   carries the button's line-height — which pushed the glyph off centre. Make
+   the wrapper and the svg block-level so `place-items: center` actually governs. */
+.icon-btn > span { display: grid; place-items: center; line-height: 0; }
+.icon { width: 16px; height: 16px; flex: none; }
+.icon-btn .icon { display: block; }
+
+/* Sticky bar. */
+.save-bar { background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--shadow-bar); }
+
+/* Floating. */
+.modal, .toast { background: var(--raised); border: 1px solid var(--line); box-shadow: var(--shadow-raised); }
+.modal { border-radius: 10px; }
+.toast { border-radius: 8px; }
+.modal-overlay { background: var(--scrim); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+
+/* ---- Header --------------------------------------------------------------
+   padding-top 20 / title row 32 / 16 / controls row(s) / 12 between rows /
+   pills row / padding-bottom 16. */
+
+.header-inner { padding-top: var(--s6); padding-bottom: var(--s5); }
+
+.brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+}
+.brand-actions { display: flex; gap: var(--s2); }
+
+/* Configuration controls. Always visible — the branch selector is reached for
+   too often to hide behind a disclosure. */
+.config-panel { margin-top: var(--s5); } /* 16: title row -> controls */
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s4);          /* 12: horizontal gap between controls */
+    align-items: flex-end;
+    margin-bottom: var(--s4); /* 12: between rows, and controls -> pills */
+}
+.control { display: flex; flex-direction: column; gap: var(--s2); flex: 1 1 240px; min-width: 0; } /* 6: label -> field */
+.control.narrow { flex: 0 0 224px; }  /* "Max commits (when Base is empty)" is 216px at 13px */
+.control label { color: var(--muted); }
+.muted { color: var(--muted); font-weight: 400; }
+
+#repo-path, #base-ref { font-family: var(--mono); }
+
+.repo-meta { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s4); }
+/* A pill is a fact chip like .commit-tag, not a bordered
+   oval. .pill.ok stays neutral text with only its dot turning green — the
+   "clean" pill is one fact among several, not an accent moment. */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 20px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--muted);
+    white-space: nowrap;
+}
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
+.pill.ok::before { background: var(--success); }
+.pill.warn { background: var(--warning-tint); color: var(--warning); }
+.pill.warn::before { background: var(--warning); }
+.pill:not(.ok):not(.warn)::before { display: none; }
+
+/* ---- Main --------------------------------------------------------------- */
+
+.main { padding-top: var(--s7); padding-bottom: var(--s7); } /* 24: header -> filter bar */
+
+/* A place, not a sentence: the dashed-border empty state, the tool's own
+   glyph, and the one keyboard fact that is true. */
+.placeholder {
+    display: grid;
+    justify-items: center;
+    gap: var(--s3);
+    padding: var(--s9) var(--s7);
+    border: 1px dashed var(--ctrl);
+    border-radius: 10px;
+    color: var(--muted);
+    text-align: center;
+}
+.placeholder .icon { width: 28px; height: 28px; color: var(--faint); margin-bottom: var(--s1); }
+.placeholder p { margin: 0; max-width: 40ch; text-wrap: pretty; }
+.placeholder-hint { font-size: 12px; line-height: 16px; }
+#no-matches.placeholder { padding: var(--s7); border-style: solid; border-color: var(--line); }
+kbd {
+    display: inline-block; min-width: 18px; height: 18px; padding: 0 5px;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: var(--surface-2); color: var(--muted);
+    font: 500 11px/16px var(--sans); text-align: center;
+}
+
+.banner, .state-warn {
+    border-left-width: 3px;
+    padding: var(--s4) var(--s5);
+    margin-bottom: var(--s4);
+}
+.banner.error { border-left-color: var(--danger); }
+.banner.warn, .state-warn { border-left-color: var(--warning); }
+.err-text { color: var(--danger); }
+
+.list-info { color: var(--muted); margin: 0 0 var(--s5); } /* 16: list-info -> ledger */
+.list-info code { font-family: var(--mono); color: var(--text); }
+
+/* ---- Filter bar --------------------------------------------------------- */
+
+.filter-bar {
+    display: flex;
+    gap: var(--s4);           /* 12: internal gap */
+    align-items: center;
+    margin-bottom: var(--s4); /* 12: filter bar -> list-info */
+    flex-wrap: wrap;
+}
+.filter-field { position: relative; flex: 1 1 260px; display: flex; align-items: center; }
+.filter-field .icon {
+    position: absolute;
+    left: var(--s4);
+    color: var(--muted);
+    pointer-events: none;
+}
+.filter-field input { width: 100%; padding-left: 38px; }
+.check {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+    min-height: 36px;
+}
+.check input { min-height: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.filter-count { color: var(--muted); white-space: nowrap; }
+/* The one count that matters before a save: hidden edited commits are still
+   included in it. */
+.filter-count.warn { color: var(--warning); font-weight: 500; }
+.filter-count.warn::before { content: "\26A0\00A0"; }
+
+/* ---- Commit list: the ledger --------------------------------------------
+   A ledger, not a form: one continuous list hung off a timeline rail, each
+   commit a row rather than a card in a grid. The DOM app.js emits is kept
+   exactly (li.commit > p.commit-subject + div.commit-head +
+   div.commit-actions + div.editor-wrap + div.commit-preview +
+   div.commit-diff); the change is that .commit is a CSS grid, the actions
+   move up beside the metadata, the nine borders become one, and the rail
+   runs inside the container.
+   The list runs newest-first, which is `git log` order but is not
+   self-evident on screen — and here the direction has a consequence, since
+   editing an older commit rewrites every newer one above it. The rail plus
+   its two captions say which way is which without the user having to
+   compare timestamps, and it still works when every commit in the range is
+   from the same afternoon. */
+
+.timeline {
+    position: relative;
+    overflow: hidden;              /* clips the edited bar and row washes to the radius */
+}
+/* One continuous rail from the newest dot to the oldest, behind every row. */
+.timeline::before {
+    content: "";
+    position: absolute;
+    left: 24px;
+    top: 16px;                     /* centre of the 32px caption row */
+    bottom: 16px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--line);
+}
+.tl-cap {
+    position: relative;
+    margin: 0;
+    min-height: 32px;
+    padding: 8px 20px 8px 52px;
+    color: var(--muted);
+    font-weight: 500;
+}
+.tl-word { font-variant-caps: all-small-caps; letter-spacing: .04em; }
+.tl-oldest { border-top: 1px solid var(--line); }
+.tl-dot {
+    position: absolute;
+    left: 19px; top: 11px;         /* 10px dot centred on x=24, y=16 */
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+/* Solid at the newest end, hollow at the oldest: a filled cap reads as
+   "here", an open one as "this carries on behind you". */
+.tl-newest .tl-dot { background: var(--accent); border: 2px solid var(--accent); }  /* the one accent node */
+.tl-oldest .tl-dot { background: var(--surface); border: 2px solid var(--faint); }
+
+.commit-list { list-style: none; margin: 0; padding: 0; display: block; }
+/* Only ever seen on a re-load: on first load the ledger is still hidden. */
+.commit-list.loading { opacity: .6; pointer-events: none; }
+.timeline:has(.commit-list.loading)::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    height: 2px; width: 30%;
+    background: var(--accent);
+    border-radius: 1px;
+    animation: gce-progress 1.2s var(--ease) infinite;
+}
+@keyframes gce-progress { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
+@media (prefers-reduced-motion: reduce) {
+    .timeline:has(.commit-list.loading)::after { width: 100%; animation: none; }
+}
+
+/* ---- Row ------------------------------------------------------------------ */
+.commit {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "subject subject"
+        "head    actions"
+        "editor  editor"
+        "files   files"
+        "diff    diff";
+    column-gap: 12px;
+    align-items: center;
+    padding: 14px 20px 16px 52px;  /* 14 top: the 22px first line has ~3.5px of leading above the caps */
+    border-top: 1px solid var(--line);
+}
+/* Every row owns its top line, so hiding the first row (filter) never leaves a double hairline. */
+.commit.edited {
+    background: var(--edited-row);
+    box-shadow: inset 3px 0 0 var(--edited);     /* flush with the ledger edge, clipped by its radius */
+}
+
+/* Node: 10px on the rail, centred on the first line box (22px tall in both
+   states). --age is set per card from JS: 0 at the newest, 1 at the oldest —
+   pure reinforcement, the two captions already carry the meaning in words. */
+.commit::before {
+    content: "";
+    position: absolute;
+    left: 19px; top: 20px;         /* 14 + 11 - 5 */
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    box-sizing: border-box;
+    background: var(--surface);    /* knocks the rail out behind the ring */
+    border: 2px solid var(--faint);
+    opacity: calc(1 - (var(--age, 0) * 0.45));   /* floor .55, so the oldest ring is still there */
+}
+.commit.edited::before { background: var(--edited); border-color: var(--edited); opacity: 1; }  /* solid = touched */
+
+/* ---- Subject and metadata ------------------------------------------------- */
+.commit-subject {
+    grid-area: subject;
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+}
+.commit.open .commit-subject { display: none; }  /* unchanged: the editor's first line is the subject */
+
+.commit-head {
+    grid-area: head;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 22px;              /* keeps the node aligned whether the subject is shown or not */
+    min-width: 0;
+}
+.commit-sha {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+    color: var(--muted);
+}
+.commit-author { color: var(--text); }
+.commit-date   { color: var(--muted); }
+
+.commit-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 20px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--muted);
+    white-space: nowrap;
+}
+.commit-tag .icon { width: 12px; height: 12px; }
+.commit-tag.pushed, .commit-tag.on-remote { background: var(--warning-tint); color: var(--warning); }
+.commit-tag.edited { background: var(--edited-tint); color: var(--edited); margin-left: auto; }
+
+/* ---- Actions: on the metadata row, trailing ------------------------------- */
+.commit-actions {
+    grid-area: actions;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.disclosure, .commit-reset.link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.disclosure .icon, .commit-reset .icon { width: 14px; height: 14px; color: var(--faint); }
+.disclosure .chev { width: 12px; height: 12px; transition: transform var(--d-fast) var(--ease); }
+.disclosure:hover:not(:disabled), .commit-reset.link:hover { background: var(--hover); color: var(--text); text-decoration: none; }
+.disclosure:hover .icon, .commit-reset:hover .icon { color: currentColor; }
+.disclosure[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
+.disclosure[aria-expanded="true"] .icon { color: currentColor; }
+.disclosure[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.commit-reset { margin-left: 4px; }
+
+/* ---- Editor ---------------------------------------------------------------- */
+.editor-wrap { grid-area: editor; margin-top: 12px; min-width: 0; }
+.editor-label {
+    display: flex;
+    justify-content: space-between;   /* "Message" left; the guide becomes a corner hint on the right */
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 6px;
+    color: var(--muted);
+}
+.editor-label .name { color: var(--text); font-weight: 600; }
+.editor-label > span { text-align: right; font-variant-numeric: tabular-nums; }
+.subject-count.over { color: var(--warning); }
+.subject-count.err { color: var(--danger); }
+
+.commit textarea {
+    display: block;
+    width: 100%;
+    min-height: 66px;              /* = MIN_TA_H in app.js: 2 x 22 + 20 + 2 */
+    padding: 10px 12px;
+    resize: vertical;
+    overflow: hidden;
+    color: var(--text);
+}
+.commit textarea:hover { border-color: var(--ctrl-hover); }
+.commit textarea::selection { background: var(--selection); }
+.commit textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: var(--well-inset), inset 0 0 0 1px var(--danger); }
+
+/* Garnish: a hairline at the wrap column, the same fact VS Code and Vim
+   users already have as a ruler. --wrap-col is set once at boot from the
+   real server-side wrap width (app.js), so it can never drift from what
+   saving actually does; if wrapping is disabled the gradient collapses to
+   nothing. */
+.commit textarea {
+    background-image: linear-gradient(to right,
+        transparent calc(12px + var(--wrap-col, 0ch)),
+        var(--line)  calc(12px + var(--wrap-col, 0ch)),
+        var(--line)  calc(12px + var(--wrap-col, 0ch) + 1px),
+        transparent  calc(12px + var(--wrap-col, 0ch) + 1px));
+    background-attachment: local;
+}
+:root:not([style*="--wrap-col"]) .commit textarea { background-image: none; }
+
+.commit-hint { margin-top: 6px; color: var(--muted); }
+.commit-hint:empty { display: none; }  /* no phantom 4px when there is nothing to say */
+.commit-hint.over { color: var(--warning); }
+.commit-hint.err-text { color: var(--danger); font-weight: 500; }
+
+/* ---- Files ------------------------------------------------------------------ */
+.commit-preview { grid-area: files; margin-top: 12px; min-width: 0; font-size: 13px; line-height: 18px; }
+.stat-scope { margin-bottom: 6px; font-style: italic; color: var(--muted); }
+.stat-head  { margin-bottom: 6px; color: var(--muted); }
+.stat-row {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    column-gap: 10px;
+    align-items: center;
+    min-height: 24px;
+}
+.stat-status {
+    width: 18px; height: 18px;
+    display: grid; place-items: center;
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font: 600 11px/18px var(--mono);
+}
+.stat-status.s-A { background: var(--success-tint); color: var(--success); }
+.stat-status.s-D { background: var(--danger-tint);  color: var(--danger); }
+.stat-status.s-R, .stat-status.s-C { background: var(--edited-tint); color: var(--edited); }
+.stat-path { overflow-wrap: anywhere; }
+.stat-old  { color: var(--muted); text-decoration: line-through; }
+.stat-nums { font: 400 12px/16px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.add { color: var(--success); }
+.del { color: var(--danger); }
+
+/* ---- Diff -------------------------------------------------------------------- */
+.commit-diff { grid-area: diff; margin-top: 8px; min-width: 0; }
+.commit-diff pre.diff {
+    margin: 0;
+    padding: 10px 0;               /* lines pad themselves so tints run edge to edge */
+    max-height: 520px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ctrl) transparent;
+}
+.commit-diff pre.diff span {
+    display: block;
+    /* pre-wrap keeps the leading whitespace that makes a patch readable, while
+       still breaking long lines; anywhere is the fallback for a token with no
+       break opportunity at all, such as a base64 blob or a lockfile hash. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 0 12px 0 calc(12px + 2ch);
+    /* Hanging indent: a wrapped continuation cannot be misread
+       as a new context line, since the +/- prefix only appears on real line
+       starts, and it keeps the tint's left edge aligned with the +/-. */
+    text-indent: -2ch;
+}
+.commit-diff .d-add  { color: var(--success); background: var(--add-tint); }
+.commit-diff .d-del  { color: var(--danger);  background: var(--del-tint); }
+.commit-diff .d-hunk { color: var(--muted);   background: var(--surface-2); margin: 4px 0; }
+.commit-diff .d-file { color: var(--text); font-weight: 600; }
+.commit-diff .d-meta { color: var(--muted); }
+
+/* ---- Panels (backups, save log) ----------------------------------------- */
+
+.panel {
+    margin-top: var(--s8); /* 32: ledger -> panel, and panel -> panel */
+    border-top: 1px solid var(--line);
+    padding-top: var(--s4);
+}
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
+.panel h2 { margin: 0; }
+.panel p { margin: var(--s2) 0 var(--s4); }
+.panel code { font-family: var(--mono); }
+
+.stack-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s4); }
+.stack-list li {
+    padding: var(--s4);
+}
+.save-log-head { display: flex; justify-content: space-between; gap: var(--s4); align-items: baseline; flex-wrap: wrap; }
+.save-log-title { font-weight: 600; }
+.save-log-meta { font: 400 12px/16px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.save-log-body { margin-top: var(--s1); font: 400 13px/18px var(--sans); color: var(--muted); overflow-wrap: anywhere; }
+.save-log-body code { color: var(--text); font-family: var(--mono); }
+.save-log-entry.ok { box-shadow: inset 3px 0 0 var(--success); }
+.save-log-entry.error { box-shadow: inset 3px 0 0 var(--danger); }
+
+.backup-row { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; }
+.backup-name { color: var(--accent); }
+.backup-restore { font-size: 13px; color: var(--muted); margin-top: var(--s3); }
+.backup-delete { margin-left: auto; color: var(--danger); }
+
+/* A real button beside selectable text, rather than a click-to-copy span that
+   keyboard users cannot reach at all. */
+.copy-row { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s1); }
+.copy-row code {
+    padding: var(--s1) var(--s3);
+    /* pre-wrap keeps the command's spacing; lines break at spaces, and a token
+       (the 40-character SHA, a long path) is broken only when a line cannot
+       hold it at all. break-word keeps such tokens out of the item's
+       min-content size, so min-width: 0 is what lets this flex item narrow to
+       a phone-width toast instead of overflowing it. */
+    min-width: 0;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    user-select: all;
+}
+
+/* ---- Orphan drafts ------------------------------------------------------ */
+
+.orphan-drafts {
+    margin-bottom: var(--s5);
+    border-color: var(--edited);
+    padding: var(--s4) var(--s5);
+}
+.orphan-drafts summary { cursor: pointer; color: var(--edited); font-weight: 600; }
+.orphan-drafts p { margin: var(--s3) 0; font-size: 13px; }
+.orphan { border-top: 1px solid var(--line); padding: var(--s3) 0; }
+.orphan-head { display: flex; align-items: center; gap: var(--s4); margin-bottom: var(--s1); }
+.orphan-head code { color: var(--accent); font-family: var(--mono); }
+.orphan pre {
+    margin: 0;
+    padding: var(--s3);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 160px;
+    overflow: auto;
+}
+
+/* ---- Save bar ----------------------------------------------------------- */
+
+.save-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 6;
+}
+/* Full-bleed background, but the content stays in a readable column instead of
+   sitting 1400px apart at the two extreme edges. */
+.save-bar-inner {
+    max-width: 960px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--s4);
+    padding-top: var(--s4);
+    padding-bottom: var(--s4);
+}
+.save-bar-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.edit-count { font-size: 14px; color: var(--muted); }
+.edit-count.has-edits { color: var(--edited); font-weight: 600; }
+.draft-status { color: var(--muted); }
+.draft-status.warn { color: var(--danger); font-weight: 500; }
+.save-bar-actions { display: flex; align-items: center; gap: var(--s3); flex: none; }
+.kbd-hint { margin-left: var(--s1); }
+
+/* ---- Modal -------------------------------------------------------------- */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    padding: var(--s5);
+    animation: gce-fade var(--d-base) var(--ease);
+}
+.modal {
+    width: min(520px, 100% - 32px);
+    padding: var(--s7);
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: gce-pop var(--d-base) var(--ease);
+}
+.modal-head { display: flex; align-items: center; gap: var(--s4); margin-bottom: var(--s3); }
+.modal-glyph {
+    width: 40px; height: 40px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 50%;                          /* the third permitted circle: a marker */
+    background: var(--warning-tint); color: var(--warning);
+}
+.modal-glyph svg { width: 18px; height: 18px; }
+.modal h2 { margin: 0; }
+.modal p { margin: 0 0 var(--s4); }
+.modal code { font: 400 12px/16px var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
+.modal-list { list-style: none; margin: 0 0 var(--s5); padding: 0; color: var(--muted); font-size: 13px; line-height: 18px; }
+.modal-list li { position: relative; padding-left: 20px; }
+.modal-list li::before { content: "\2713"; position: absolute; left: 2px; color: var(--success); }   /* checkmark */
+.modal-impact { margin-bottom: var(--s4); }
+.modal-summary { color: var(--muted); margin-bottom: var(--s4); }
+.modal-summary ul { margin: var(--s1) 0 0; padding-left: var(--s5); }
+.modal-warn { color: var(--warning); }
+.warn-list { list-style: none; margin: 0; padding: 0; color: var(--warning); font-size: 13px; line-height: 18px; }
+.warn-list li { position: relative; padding-left: 20px; }
+.warn-list li::before { content: "\26A0"; position: absolute; left: 2px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: var(--s3); margin-top: var(--s7); }
+.modal-kbd { margin: var(--s3) 0 0; text-align: right; font-size: 12px; line-height: 16px; color: var(--muted); }
+@keyframes gce-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes gce-fade { from { opacity: 0; } }
+
+/* ---- Toast -------------------------------------------------------------- */
+
+.toast {
+    position: fixed;
+    right: 24px; bottom: calc(60px + 16px);
+    /* 440: the undo command's 40-character SHA (312px at 13px mono) fits on
+       one line of the body column, which is the toast minus 26px padding,
+       the 18px icon, the 28px close button and two 10px gaps. */
+    width: min(440px, 100vw - 32px);
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) 28px;
+    column-gap: 10px;
+    align-items: start;
+    padding: 12px 12px 12px 14px;
+    z-index: 30;
+    animation: gce-rise var(--d-base) var(--ease);
+}
+.toast-icon svg { width: 18px; height: 18px; margin-top: 1px; }
+.toast.ok .toast-icon    { color: var(--success); }
+.toast.error .toast-icon { color: var(--danger); }
+.toast-main { min-width: 0; }
+.toast a, .toast button.link { color: var(--accent); }
+.toast-title { font: 600 13px/20px var(--sans); }
+.toast-body  { font: 400 13px/18px var(--sans); color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.toast-body code { color: var(--text); font-family: var(--mono); }
+.toast-close {
+    width: 28px; height: 28px; min-height: 0;
+    padding: 0;
+    display: grid; place-items: center;
+    border: 0;
+    background: transparent;
+    color: var(--faint);
+}
+.toast-close svg { width: 14px; height: 14px; }
+.toast-close:hover { background: var(--hover); color: var(--text); }
+@keyframes gce-rise { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---- Narrow ----------------------------------------------------------------
+   One breakpoint. Last of the layout rules so it overrides the base ones. */
+@media (max-width: 760px) {
+    .shell { padding-inline: 16px; } /* narrows the shell gutters alongside the ledger below */
+    .commit {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "subject" "head" "actions" "editor" "files" "diff";
+        padding: 12px 16px 14px 40px;
+    }
+    .commit-actions { justify-self: start; margin-top: 6px; flex-wrap: wrap; }
+    .commit-tag.edited { margin-left: 0; }
+    .tl-cap { padding-left: 40px; }
+    .timeline::before { left: 18px; }
+    .tl-dot, .commit::before { left: 14px; width: 8px; height: 8px; }
+    .tl-dot { top: 12px; }
+    .commit::before { top: 19px; }         /* 12 + 11 - 4 */
+    .control { flex: 1 1 100%; }
+    .controls button { width: 100%; }
+    /* "Max commits" and "Load commits" share one line; the parenthetical
+       would wrap to three lines in a 96px column. */
+    .control.narrow { flex: 0 0 96px; }
+    .control.narrow label .muted { display: none; }
+    #load-commits-btn { flex: 1 1 auto; width: auto; }
+    .save-bar-inner { flex-direction: column; align-items: stretch; gap: var(--s3); }
+    .save-bar-actions { width: 100%; }
+    .save-bar-actions button { flex: 1; }
+    body { padding-bottom: 120px; }
+    .toast { right: 16px; bottom: calc(96px + 12px); } /* above the taller, stacked save bar */
+}
+
+/* ---- Motion ----------------------------------------------------------------
+   Four motions total: hover fills (fast), chevrons (fast), panels/modal/
+   toast entering (fast-to-base), and the loading hairline. Nothing moves on
+   exit — closing should feel instant. */
+button, .disclosure, input, select, textarea {
+    transition: background-color var(--d-fast), border-color var(--d-fast), color var(--d-fast);
+}
+.commit-preview:not([hidden]), .commit-diff:not([hidden]), .editor-wrap:not([hidden]) {
+    animation: gce-fade var(--d-fast) var(--ease);
+}
+
+/* Coarse pointers need a 44px target, and no keyboard hints. */
+@media (pointer: coarse) {
+    button, .disclosure, .commit-reset.link, .check, input, select { min-height: 44px; }
+    .icon-btn, .toast-close, button.link { min-height: 44px; min-width: 44px; }
+    .toast { grid-template-columns: 18px minmax(0, 1fr) 44px; }
+    .kbd-hint, .modal-kbd { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Commit Message Editor</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <a class="skip-link" href="#commit-list">Skip to commits</a>
+
+    <header class="header">
+        <div class="shell header-inner">
+            <div class="brand">
+                <h1>Commit messages</h1>
+                <div class="brand-actions">
+                    <button id="theme-toggle" class="icon-btn" type="button"
+                            aria-label="Colour theme: system" title="Colour theme">
+                        <span id="theme-icon" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="config-panel" class="config-panel">
+                <div class="controls">
+                    <div class="control">
+                        <label for="repo-path">Repository path</label>
+                        <input type="text" id="repo-path" placeholder="/path/to/repo"
+                               value="{{ default_repo }}" spellcheck="false" autocomplete="off">
+                    </div>
+                    <button id="load-branches-btn">Load repo</button>
+                </div>
+                <div class="controls" id="branch-controls" hidden>
+                    <div class="control">
+                        <label for="branch-select">Branch <span class="muted">(the one you are editing)</span></label>
+                        <select id="branch-select"></select>
+                    </div>
+                    <div class="control">
+                        <label for="base-ref">Base <span class="muted">(branch start — auto-detected)</span></label>
+                        <input type="text" id="base-ref" placeholder="e.g. main or origin/main"
+                               spellcheck="false" autocomplete="off">
+                    </div>
+                    <!-- The hint sits inside the label so this control is the same
+                         height as its neighbours on a flex-end row. Default and cap
+                         come from the server (gce-config) via app.js. -->
+                    <div class="control narrow">
+                        <label for="limit">Max commits <span class="muted">(when Base is empty)</span></label>
+                        <input type="number" id="limit" min="1">
+                    </div>
+                    <button id="load-commits-btn">Load commits</button>
+                </div>
+                <div id="repo-meta" class="repo-meta"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main shell" id="main">
+        <div id="banner" class="banner" hidden></div>
+        <div id="state-warn" class="state-warn" hidden></div>
+        <div id="orphan-drafts" class="orphan-drafts" hidden></div>
+
+        <!-- Filter bar: purely client-side over the loaded commits -->
+        <div id="filter-bar" class="filter-bar" hidden>
+            <div class="filter-field">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+                <input type="search" id="filter" placeholder="Filter by message, author or hash"
+                       spellcheck="false" autocomplete="off" aria-label="Filter commits"
+                       aria-describedby="filter-count">
+            </div>
+            <label class="check"><input type="checkbox" id="filter-edited"> Edited only</label>
+            <span id="filter-count" class="filter-count"></span>
+            <button id="expand-all" class="ghost" type="button">Expand all</button>
+        </div>
+
+        <p id="list-info" class="list-info" hidden></p>
+
+        <div id="placeholder" class="placeholder">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>
+            <p>Enter a repository path and load a branch to view and edit its commit messages.</p>
+            <p class="placeholder-hint"><kbd>↵</kbd> in the path field loads the repository</p>
+        </div>
+
+        <h2 class="sr-only">Commits</h2>
+
+        <!-- The rail gives the list a direction. The two captions carry the
+             meaning in words; the graduated node fill only reinforces it, so
+             nothing here depends on seeing colour. -->
+        <div id="timeline" class="timeline" hidden>
+            <p class="tl-cap tl-newest"><span class="tl-dot" aria-hidden="true"></span><span class="tl-word">newest</span></p>
+            <ol id="commit-list" class="commit-list" tabindex="-1"></ol>
+            <p class="tl-cap tl-oldest">
+                <span class="tl-dot" aria-hidden="true"></span>
+                <span id="tl-oldest-label">oldest</span>
+            </p>
+        </div>
+
+        <div id="no-matches" class="placeholder" hidden><p>No commits match this filter.</p></div>
+
+        <!-- Recovery points created by past saves -->
+        <section id="backups" class="panel" aria-labelledby="backups-title" hidden>
+            <div class="panel-head">
+                <h2 id="backups-title">Backups</h2>
+                <button id="backups-refresh" class="ghost">Refresh</button>
+            </div>
+            <p class="muted">
+                Every save leaves a backup branch. They are real branches, so
+                <code>git branch</code> and your git GUI show them too.
+            </p>
+            <ol id="backups-list" class="stack-list"></ol>
+        </section>
+
+        <!-- Stacked record of save results; outlives the toast -->
+        <section id="save-log" class="panel" aria-labelledby="save-log-title" hidden>
+            <div class="panel-head">
+                <h2 id="save-log-title">Save log</h2>
+                <button id="save-log-clear" class="ghost">Clear</button>
+            </div>
+            <ol id="save-log-list" class="stack-list"></ol>
+        </section>
+    </main>
+
+    <footer id="save-bar" class="save-bar" hidden>
+        <div class="shell save-bar-inner">
+            <div class="save-bar-status">
+                <span id="edit-count" class="edit-count">No edits</span>
+                <span id="draft-status" class="draft-status" hidden></span>
+            </div>
+            <div class="save-bar-actions">
+                <button id="reset-all-btn" class="ghost">Discard edits</button>
+                <button id="save-btn" class="primary" disabled>Save changes</button>
+                <kbd class="kbd-hint" aria-hidden="true">⌘S</kbd>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Confirmation dialog -->
+    <div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true"
+         aria-labelledby="modal-title" aria-describedby="modal-impact" hidden>
+        <div class="modal">
+            <div class="modal-head">
+                <span class="modal-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+                <h2 id="modal-title">Rewrite commit messages?</h2>
+            </div>
+            <p>This rewrites history on <code id="modal-branch"></code> — the edited
+               commits and all their descendants get <strong>new hashes</strong>.</p>
+            <ul class="modal-list">
+                <li>A backup branch and a reflog entry are created, so this is undoable.</li>
+                <li>Authors, dates and file contents are preserved.</li>
+            </ul>
+            <div id="modal-impact" class="modal-impact"></div>
+            <div id="modal-summary" class="modal-summary"></div>
+            <div id="modal-warnings" class="modal-warnings"></div>
+            <div class="modal-actions">
+                <button id="modal-cancel" class="ghost">Cancel</button>
+                <button id="modal-confirm" class="primary danger">Rewrite messages</button>
+            </div>
+            <p class="modal-kbd" aria-hidden="true"><kbd>Esc</kbd> cancels · <kbd>⌘</kbd><kbd>↵</kbd> confirms</p>
+        </div>
+    </div>
+
+    <!-- Visual only; notify() announces through the live regions below, which
+         are always present and never hidden, unlike the toast. -->
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Polite announcements for state that has no visible focus change:
+         filter results, draft persistence, disclosure loading, toasts. -->
+    <div id="live-polite" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="live-assertive" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+    <!-- Server-supplied config as data, not code: the CSP allows no inline script. -->
+    <script id="gce-config" type="application/json">{{ {"wrapWidth": wrap_width, "csrfToken": csrf_token, "defaultLimit": default_limit, "maxCommits": max_commits} | tojson }}</script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
