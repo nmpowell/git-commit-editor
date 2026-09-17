@@ -1,0 +1,13 @@
+# Regenerates screenshot.webp for the README: `shot-scraper multi shots.yml`.
+# Builds the UI-test fixture repository (messy commit messages, a merge, an
+# over-long subject) at a fixed path so the picture is the same every time and
+# shows no personal paths, then starts the app against it.
+- sh: rm -rf /tmp/git-commit-editor-demo && uv run python tests/test_ui.py /tmp/git-commit-editor-demo
+  server: uv run git-commit-editor --repo /tmp/git-commit-editor-demo --port 8345
+  url: http://127.0.0.1:8345/
+  output: screenshot.webp
+  quality: 80
+  width: 1024
+  height: 1250
+  wait_for: "document.querySelector('#commit-list li.commit')"
+  wait: 500
