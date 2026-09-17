@@ -1,8 +1,8 @@
 """Tests for app.wrap_commit_message and the save-time wrapping wiring.
 
-Run under pytest (`pytest test_app.py`), or directly as a script
-(`python test_app.py`), which delegates to pytest via the __main__ guard
-below. The repo helpers and the `client`/`post_json` fixtures live in
+Run under pytest (`uv run pytest tests/test_app.py`), or directly as a
+script (`uv run python tests/test_app.py`), which delegates to pytest via the
+__main__ guard below. The repo helpers and the `client`/`post_json` fixtures live in
 conftest.py so the end-to-end tests here can exercise a real save against a
 real git repo.
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from importlib.metadata import PackageNotFoundError
 
 import pytest
 
@@ -784,6 +785,24 @@ def test_non_loopback_bind_is_refused(monkeypatch, capsys):
     assert exc_info.value.code == 2  # argparse usage error
     assert "refusing to bind 0.0.0.0" in capsys.readouterr().err
     assert runs == []
+
+
+def test_cli_starts_without_dist_metadata(monkeypatch, capsys):
+    """A source tree that was never installed has no dist metadata; --version
+    must degrade to a placeholder rather than crash every invocation, --help
+    included, before argparse even runs."""
+
+    def _missing(name):
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr(appmod, "version", _missing)
+    monkeypatch.setattr(sys, "argv", ["git-commit-editor", "--version"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        appmod.main()
+
+    assert exc_info.value.code == 0
+    assert "0+unknown" in capsys.readouterr().out
 
 
 def test_config_defaults_exist_at_import():

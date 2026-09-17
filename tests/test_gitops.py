@@ -1,8 +1,8 @@
 """Tests for gitops.rewrite_messages and friends.
 
-Run under pytest (`pytest test_gitops.py`), or directly as a script
-(`python test_gitops.py`), which delegates to pytest via the __main__ guard
-below. Shared git-repo helpers and fixtures live in conftest.py.
+Run under pytest (`uv run pytest tests/test_gitops.py`), or directly as a
+script (`uv run python tests/test_gitops.py`), which delegates to pytest via
+the __main__ guard below. Shared git-repo helpers and fixtures live in conftest.py.
 """
 
 from __future__ import annotations

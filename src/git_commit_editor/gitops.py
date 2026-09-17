@@ -26,7 +26,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Any, Literal, TypedDict, overload
 
 # Field separator for `for-each-ref --format` output: 0x1f (unit separator)
 # cannot appear in a ref name or object id, so a split on it is unambiguous.
@@ -604,7 +604,16 @@ def branch_upstream(repo: str, branch: str) -> dict[str, Any]:
     return {"upstream": upstream or None, "push": push or None}
 
 
-def _unpublished_shas(repo: str, branch: str) -> dict[str, set[str] | str | None]:
+class _Publication(TypedDict):
+    # The *un*published sets (None when the reference does not exist) and the
+    # refs they were computed against, so the caller can say how it knows.
+    not_on_upstream: set[str] | None
+    not_on_any_remote: set[str] | None
+    upstream_ref: str | None
+    push_ref: str | None
+
+
+def _unpublished_shas(repo: str, branch: str) -> _Publication:
     """Which commits on ``branch`` are already published, and how we know.
 
     Two distinct facts, deliberately not conflated:

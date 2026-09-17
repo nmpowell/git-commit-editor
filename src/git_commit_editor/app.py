@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import textwrap
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 from urllib.parse import urlparse
 
@@ -27,6 +28,18 @@ from . import gitops
 from .gitops import GitError
 
 app = Flask(__name__)
+
+
+def _dist_version() -> str:
+    """The installed distribution's version, or a placeholder when there is
+    no dist metadata (a source tree on ``PYTHONPATH``, a vendored copy). The
+    CLI must still start in that case; a version string is not worth a crash."""
+    try:
+        return version("git-commit-editor")
+    except PackageNotFoundError:
+        return "0+unknown"
+
+
 # History rewriting is consequential; bound the request body to a sane size.
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB
 
@@ -523,13 +536,8 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Git Commit Message Editor")
-
-    from importlib.metadata import version
-
     parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {version('git-commit-editor')}",
+        "--version", action="version", version=f"%(prog)s {_dist_version()}"
     )
 
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")

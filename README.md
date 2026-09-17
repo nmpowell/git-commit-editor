@@ -370,8 +370,8 @@ git branch --list 'commit-editor-backup/*' | xargs -r git branch -D
     git clone https://github.com/nmpowell/git-commit-editor
     cd git-commit-editor
     uv sync --locked
-    uv run playwright install chromium   # once; the UI tests need a browser
-    uv run pytest                        # backend + Playwright end-to-end, ~90 s
+    uv run playwright install chromium   # once; add --with-deps on Linux
+    uv run pytest                        # backend + Playwright end-to-end, ~60 s
     uv run mypy
     uv run ruff check .
     uv run ruff format --check .
@@ -438,4 +438,4 @@ and the orphan-drafts drawer.
 
 ## Licence
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](https://github.com/nmpowell/git-commit-editor/blob/main/LICENSE).
