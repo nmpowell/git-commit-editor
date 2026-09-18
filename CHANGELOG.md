@@ -3,7 +3,7 @@
 Each entry links the issue that holds the reasoning. Versions are also
 published as [GitHub Releases](https://github.com/nmpowell/git-commit-editor/releases).
 
-## Unreleased
+## 0.1.1 — 2026-09-18
 
 ### Fixed
 

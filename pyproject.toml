@@ -1,6 +1,6 @@
 [project]
 name = "git-commit-editor"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local web app to view and edit the commit messages on a git branch"
 readme = "README.md"
 requires-python = ">=3.14"
