@@ -45,6 +45,7 @@ const el = {
     resetAllBtn: $("reset-all-btn"),
     saveBtn: $("save-btn"),
     kbdHint: document.querySelector(".kbd-hint"),
+    modalModKey: $("modal-mod-key"),
     modalOverlay: $("modal-overlay"),
     modalBranch: $("modal-branch"),
     modalSummary: $("modal-summary"),
@@ -1506,10 +1507,11 @@ el.repoPath.addEventListener("keydown", (e) => {
 // confirms; Tab is trapped within the modal.
 window.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        if (!modalIsOpen() && !el.saveBtn.disabled) {
-            e.preventDefault();
-            openModal();
-        }
+        // Always swallowed, whatever the app's state: the browser's fallback
+        // is "Save Page As", which is never what Cmd+S means in an editor.
+        // With nothing to save it does what the disabled button does — nothing.
+        e.preventDefault();
+        if (!modalIsOpen() && !el.saveBtn.disabled) openModal();
         return;
     }
     if (!modalIsOpen()) return;
@@ -1557,9 +1559,11 @@ window.addEventListener("beforeunload", (e) => {
     }
 });
 
-// The save-bar shortcut hint: ⌘S is right on macOS/iOS, wrong everywhere else.
+// The shortcut hints: ⌘ is right on macOS/iOS, wrong everywhere else.
 const platform = navigator.userAgentData?.platform ?? navigator.platform;
-el.kbdHint.textContent = /mac|iphone|ipad/i.test(platform) ? "⌘S" : "Ctrl+S";
+const isApple = /mac|iphone|ipad/i.test(platform);
+el.kbdHint.textContent = isApple ? "⌘S" : "Ctrl+S";
+el.modalModKey.textContent = isApple ? "⌘" : "Ctrl";
 
 el.limit.value = CONFIG.defaultLimit;
 el.limit.max = CONFIG.maxCommits;

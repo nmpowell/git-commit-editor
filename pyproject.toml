@@ -21,7 +21,7 @@ dependencies = ["flask>=3.1,<4"]
 [project.urls]
 Homepage = "https://github.com/nmpowell/git-commit-editor"
 Issues = "https://github.com/nmpowell/git-commit-editor/issues"
-Changelog = "https://github.com/nmpowell/git-commit-editor/releases"
+Changelog = "https://github.com/nmpowell/git-commit-editor/blob/main/CHANGELOG.md"
 
 [project.scripts]
 git-commit-editor = "git_commit_editor.app:main"

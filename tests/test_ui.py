@@ -868,6 +868,61 @@ def test_keyboard_cmd_s_opens_modal_escape_closes_and_restores_focus(
     expect(box).to_be_focused()
 
 
+# The key falls through to the browser exactly when the page leaves it
+# un-prevented: this records that per press, since headless Chromium shows
+# no "Save Page As" dialog to look for.
+RECORD_SAVE_KEY_JS = """() => {
+    window.__saveKeyPrevented = [];
+    window.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+            window.__saveKeyPrevented.push(e.defaultPrevented);
+        }
+    });
+}"""
+
+
+def test_cmd_s_never_reaches_the_browser(page, server, repo):
+    open_app(page, server)
+    page.evaluate(RECORD_SAVE_KEY_JS)
+    dialog = page.get_by_role("dialog", name="Rewrite commit messages?")
+
+    page.keyboard.press("Meta+s")  # nothing loaded
+    expect(dialog).to_be_hidden()
+
+    load_repo(page, repo)
+    page.keyboard.press("Meta+s")  # loaded, nothing edited
+    expect(dialog).to_be_hidden()
+
+    message_box(commit_card(page, IDX_WIP)).fill(
+        "An edit, so there is something to save"
+    )
+    page.keyboard.press("Meta+s")  # edits pending
+    expect(dialog).to_be_visible()
+    page.keyboard.press("Meta+s")  # dialog already open
+    expect(dialog).to_be_visible()
+    expect(dialog).to_have_count(1)
+
+    page.keyboard.press("Escape")
+    page.keyboard.press("Control+s")  # the non-Apple spelling
+    expect(dialog).to_be_visible()
+
+    assert page.evaluate("window.__saveKeyPrevented") == [True] * 5
+
+
+def test_keyboard_cmd_enter_confirms_the_dialog(page, server, repo):
+    open_app(page, server)
+    load_repo(page, repo)
+
+    message_box(commit_card(page, IDX_WIP)).fill("Saved from the keyboard alone")
+    page.keyboard.press("Meta+s")
+    expect(page.locator("#modal-confirm")).to_be_enabled()
+    with page.expect_request("**/api/save"):
+        page.keyboard.press("Meta+Enter")
+
+    expect(page.locator("#toast")).to_contain_text("Messages rewritten")
+    expect(page.locator("#edit-count")).to_have_text("No edits")
+
+
 # ---------------------------------------------------------------------------
 # 12. Reset message (per card) and Discard edits (all) restore originals
 # ---------------------------------------------------------------------------
